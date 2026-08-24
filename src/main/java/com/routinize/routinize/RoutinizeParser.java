@@ -1,0 +1,208 @@
+package com.routinize.routinize;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public final class RoutinizeParser {
+
+	private static final Pattern KV = Pattern.compile("(name|lore)=\"([^\"]*)\"");
+	private static final Pattern ACTION_TOKEN = Pattern.compile("\\[([^\\]]*)\\]");
+	private static final Set<String> CLICK_VERBS = Set.of("lclick", "rclick", "mclick");
+
+	private RoutinizeParser() {}
+
+	public static List<RoutinizeStep> parse(String source) {
+		List<String> lines = new ArrayList<>();
+		for (String raw : source.split("\n")) {
+			String line = raw.strip();
+			if (line.isEmpty() || line.startsWith("#")) continue;
+			lines.add(line);
+		}
+		Cursor cursor = new Cursor(lines);
+		List<RoutinizeStep> steps = parseBlock(cursor, false);
+		if (!cursor.atEnd()) {
+			throw new IllegalArgumentException("unexpected '" + cursor.peek() + "'");
+		}
+		return steps;
+	}
+
+	private static List<RoutinizeStep> parseBlock(Cursor cursor, boolean insideBlock) {
+		List<RoutinizeStep> steps = new ArrayList<>();
+		while (!cursor.atEnd()) {
+			String line = cursor.peek();
+			if (line.equals("end") || line.equals("else") || line.startsWith("elseif")) {
+				if (!insideBlock) {
+					throw new IllegalArgumentException("unexpected '" + line + "'");
+				}
+				return steps;
+			}
+			steps.add(parseLine(cursor));
+		}
+		if (insideBlock) {
+			throw new IllegalArgumentException("missing 'end' to close a block");
+		}
+		return steps;
+	}
+
+	private static RoutinizeStep parseLine(Cursor cursor) {
+		String line = cursor.next();
+
+		if (line.startsWith("command ")) {
+			return new RoutinizeStep.RunCommand(line.substring("command ".length()).strip());
+		}
+		if (line.startsWith("wait ")) {
+			String value = line.substring("wait ".length()).strip();
+			int dash = value.indexOf('-');
+			if (dash > 0) {
+				int min = Integer.parseInt(value.substring(0, dash).strip());
+				int max = Integer.parseInt(value.substring(dash + 1).strip());
+				if (max < min) {
+					throw new IllegalArgumentException("invalid wait range: " + value);
+				}
+				return new RoutinizeStep.Wait(min, max);
+			}
+			int ms = Integer.parseInt(value);
+			return new RoutinizeStep.Wait(ms, ms);
+		}
+		if (line.equals("wait_open")) {
+			return new RoutinizeStep.WaitForOpen(5000);
+		}
+		if (line.equals("wait_change")) {
+			return new RoutinizeStep.WaitForChange(5000);
+		}
+		if (line.equals("close")) {
+			return new RoutinizeStep.CloseScreen();
+		}
+		if (line.equals("stop")) {
+			return new RoutinizeStep.Stop();
+		}
+		if (line.startsWith("action")) {
+			return parseAction(line);
+		}
+		if (line.startsWith("if")) {
+			return parseIfBlock(line, cursor);
+		}
+		if (line.startsWith("loop_until")) {
+			Match match = extractMatch(line);
+			List<RoutinizeStep> body = parseBlock(cursor, true);
+			expectEnd(cursor);
+			return new RoutinizeStep.LoopUntil(match.name(), match.lore(), body);
+		}
+		if (line.equals("loop")) {
+			List<RoutinizeStep> body = parseBlock(cursor, true);
+			expectEnd(cursor);
+			return new RoutinizeStep.Loop(body);
+		}
+		throw new IllegalArgumentException("unrecognised line: " + line);
+	}
+
+	private static RoutinizeStep parseAction(String line) {
+		List<RoutinizeStep.ActionToken> tokens = new ArrayList<>();
+		Matcher m = ACTION_TOKEN.matcher(line);
+		while (m.find()) {
+			String content = m.group(1).strip();
+			int sp = content.indexOf(' ');
+			String verb = (sp == -1 ? content : content.substring(0, sp)).toLowerCase();
+			String rest = sp == -1 ? "" : content.substring(sp + 1).strip();
+
+			if (rest.equals("down") || rest.equals("up")) {
+				if (!KeyActions.isValid(verb)) {
+					throw new IllegalArgumentException("unknown world action: " + verb);
+				}
+				tokens.add(new RoutinizeStep.KeyToggle(verb, rest.equals("down")));
+				continue;
+			}
+
+			if (!CLICK_VERBS.contains(verb)) {
+				throw new IllegalArgumentException("unknown action token: " + content);
+			}
+			boolean shift = false;
+			if (rest.equals("shift") || rest.startsWith("shift ")) {
+				shift = true;
+				rest = rest.equals("shift") ? "" : rest.substring("shift ".length()).strip();
+			}
+			if (shift && verb.equals("mclick")) {
+				throw new IllegalArgumentException("mclick cannot be combined with shift");
+			}
+			Match match = extractMatch(rest);
+			tokens.add(new RoutinizeStep.InventoryClick(verb, shift, match.name(), match.lore()));
+		}
+		if (tokens.isEmpty()) {
+			throw new IllegalArgumentException("action requires at least one token");
+		}
+		return new RoutinizeStep.Action(tokens);
+	}
+
+	private static RoutinizeStep parseIfBlock(String line, Cursor cursor) {
+		Match match = extractMatch(line);
+		List<RoutinizeStep> thenSteps = parseBlock(cursor, true);
+		List<RoutinizeStep> elseSteps = List.of();
+		List<ElseIf> elseIfs = new ArrayList<>();
+		while (!cursor.atEnd()) {
+			String peek = cursor.peek();
+			if (peek.startsWith("elseif")) {
+				String elseifLine = cursor.next();
+				ElseIf elseIf = new ElseIf(extractMatch(elseifLine), parseBlock(cursor, true));
+				elseIfs.add(elseIf);
+				continue;
+			}
+			if (peek.equals("else")) {
+				cursor.next();
+				elseSteps = parseBlock(cursor, true);
+				break;
+			}
+			break;
+		}
+		expectEnd(cursor);
+		for (int i = elseIfs.size() - 1; i >= 0; i--) {
+			ElseIf elseIf = elseIfs.get(i);
+			elseSteps = List.of(new RoutinizeStep.IfPresent(elseIf.match.name(), elseIf.match.lore(), elseIf.thenSteps, elseSteps));
+		}
+		return new RoutinizeStep.IfPresent(match.name(), match.lore(), thenSteps, elseSteps);
+	}
+
+	private static void expectEnd(Cursor cursor) {
+		if (cursor.atEnd() || !cursor.next().equals("end")) {
+			throw new IllegalArgumentException("expected 'end'");
+		}
+	}
+
+	private static Match extractMatch(String line) {
+		String name = null;
+		String lore = null;
+		Matcher m = KV.matcher(line);
+		while (m.find()) {
+			if (m.group(1).equals("name")) name = m.group(2);
+			else lore = m.group(2);
+		}
+		return new Match(name, lore);
+	}
+
+	private record Match(String name, String lore) {}
+
+	private record ElseIf(Match match, List<RoutinizeStep> thenSteps) {}
+
+	private static final class Cursor {
+		private final List<String> lines;
+		private int index = 0;
+
+		private Cursor(List<String> lines) {
+			this.lines = lines;
+		}
+
+		boolean atEnd() {
+			return index >= lines.size();
+		}
+
+		String peek() {
+			return lines.get(index);
+		}
+
+		String next() {
+			return lines.get(index++);
+		}
+	}
+}

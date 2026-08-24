@@ -1,0 +1,34 @@
+# Gradle & Fabric
+.gradle/
+build/
+bin/
+out/
+classes/
+run/
+
+# IDEs
+.idea/
+.vscode/
+.settings/
+*.iml
+*.ipr
+*.iws
+*.launch
+.classpath
+.project
+
+# Java
+*.class
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# OS & temp files
+Thumbs.db
+desktop.ini
+ehthumbs.db
+*.tmp
+*.temp
+
+!gradle/wrapper/gradle-wrapper.jar
