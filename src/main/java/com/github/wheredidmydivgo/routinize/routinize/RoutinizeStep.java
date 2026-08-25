@@ -37,5 +37,5 @@ public sealed interface RoutinizeStep {
 		List<RoutinizeStep> body
 	) implements RoutinizeStep {}
 
-	record Loop(List<RoutinizeStep> body) implements RoutinizeStep {}
+	record Loop(List<RoutinizeStep> body, int count) implements RoutinizeStep {}
 }

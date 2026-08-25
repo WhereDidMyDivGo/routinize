@@ -185,7 +185,12 @@ public final class RoutinizeRunner {
 				stack.push(new Frame(loop.body()));
 			}
 		} else if (step instanceof RoutinizeStep.Loop loop) {
-			stack.push(new Frame(loop.body()));
+			if (loop.count() != -1 && frame.loopIterations >= loop.count()) {
+				frame.advance();
+			} else {
+				frame.loopIterations++;
+				stack.push(new Frame(loop.body()));
+			}
 		}
 	}
 
@@ -219,6 +224,7 @@ public final class RoutinizeRunner {
 		long stepStartNanos = 0;
 		int waitTargetMs = 0;
 		List<String> waitBaseline;
+		int loopIterations = 0;
 
 		Frame(List<RoutinizeStep> steps) {
 			this.steps = steps;
@@ -230,6 +236,7 @@ public final class RoutinizeRunner {
 			stepStartNanos = 0;
 			waitTargetMs = 0;
 			waitBaseline = null;
+			loopIterations = 0;
 		}
 	}
 }

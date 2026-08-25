@@ -10,7 +10,7 @@
   "environment": "client",
 
   "entrypoints": {
-    "client": ["com.routinize.RoutinizeClient"]
+    "client": ["com.github.wheredidmydivgo.routinize.RoutinizeClient"]
   },
 
   "depends": {

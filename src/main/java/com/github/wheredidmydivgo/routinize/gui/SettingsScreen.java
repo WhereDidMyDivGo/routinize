@@ -3,7 +3,6 @@ package com.github.wheredidmydivgo.routinize.gui;
 import com.github.wheredidmydivgo.routinize.routinize.MinecraftRoutinizeState;
 import com.github.wheredidmydivgo.routinize.routinize.RoutinizeConfig;
 import com.github.wheredidmydivgo.routinize.routinize.RoutinizeSettings;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -14,6 +13,8 @@ import net.minecraft.network.chat.Component;
 public class SettingsScreen extends Screen {
 
 	private EditBox clickRetryField;
+	private boolean chatFeedbackEnabled;
+	private Button chatFeedbackButton;
 
 	public SettingsScreen() {
 		super(Component.literal("Routinize - Settings"));
@@ -27,6 +28,13 @@ public class SettingsScreen extends Screen {
 		clickRetryField.setTextColor(0xFFFFFFFF);
 		clickRetryField.setTextShadow(true);
 		addRenderableWidget(clickRetryField);
+
+		chatFeedbackEnabled = RoutinizeSettings.INSTANCE.chatFeedbackEnabled();
+		chatFeedbackButton = Button.builder(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")), b -> {
+			chatFeedbackEnabled = !chatFeedbackEnabled;
+			b.setMessage(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")));
+		}).bounds(width / 2 - 100, 90, 200, 20).build();
+		addRenderableWidget(chatFeedbackButton);
 
 		addRenderableWidget(Button.builder(Component.literal("Save"), b -> save())
 			.bounds(width / 2 - 100, height - 45, 95, 20)
@@ -52,6 +60,7 @@ public class SettingsScreen extends Screen {
 			return;
 		}
 		RoutinizeSettings.INSTANCE.setClickRetryTimeoutMs(value);
+		RoutinizeSettings.INSTANCE.setChatFeedbackEnabled(chatFeedbackEnabled);
 		RoutinizeConfig.save();
 		MinecraftRoutinizeState.INSTANCE.sendFeedback("Settings saved");
 		Minecraft.getInstance().setScreen(new RoutinizeManagerScreen());

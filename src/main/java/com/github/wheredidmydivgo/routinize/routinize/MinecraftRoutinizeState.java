@@ -103,6 +103,12 @@ public final class MinecraftRoutinizeState implements RoutinizeState {
 		}
 	}
 
+	@Override
+	public void sendRoutineFeedback(String message) {
+		if (!RoutinizeSettings.INSTANCE.chatFeedbackEnabled()) return;
+		sendFeedback(message);
+	}
+
 	private boolean matches(ItemStack stack, String nameContains, String loreContains) {
 		if (stack.isEmpty()) return false;
 		if (nameContains != null && !stack.getHoverName().getString().contains(nameContains)) return false;

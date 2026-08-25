@@ -81,10 +81,16 @@ public final class RoutinizeManager {
 			if (toggleDown && !prevToggle) {
 				if (slot.isRunning()) {
 					slot.toggle();
-					routinizeState.sendFeedback("Stopped '" + slot.name() + "'");
-				} else if (!screenOpenNow) {
+					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "'");
+				} else if (!screenOpenNow || !slot.usesWorldActions()) {
 					slot.toggle();
-					routinizeState.sendFeedback("Started '" + slot.name() + "'");
+					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "'");
+				} else if (slot.hasPauseKeyBinding()) {
+					slot.toggle();
+					slot.togglePause();
+					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
+				} else {
+					routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui is open");
 				}
 			}
 			prevToggleDown.put(slot, toggleDown);
@@ -94,18 +100,22 @@ public final class RoutinizeManager {
 			boolean prevPause = prevPauseDown.getOrDefault(slot, false);
 			if (pauseDown && !prevPause && slot.isRunning()) {
 				boolean wasPaused = slot.isPaused();
-				slot.togglePause();
-				routinizeState.sendFeedback((wasPaused ? "Resumed '" : "Paused '") + slot.name() + "'");
+				if (wasPaused && screenOpenNow && slot.usesWorldActions()) {
+					routinizeState.sendFeedback("Can't resume '" + slot.name() + "': gui is open");
+				} else {
+					slot.togglePause();
+					routinizeState.sendRoutineFeedback((wasPaused ? "Resumed '" : "Paused '") + slot.name() + "'");
+				}
 			}
 			prevPauseDown.put(slot, pauseDown);
 
 			if (screenJustOpened && slot.isRunning() && !slot.isPaused() && slot.runner.hasHeldKeys()) {
 				if (slot.hasPauseKeyBinding()) {
 					slot.runner.pause();
-					routinizeState.sendFeedback("Paused '" + slot.name() + "': gui opened");
+					routinizeState.sendRoutineFeedback("Paused '" + slot.name() + "': gui opened");
 				} else {
 					slot.runner.stop();
-					routinizeState.sendFeedback("Stopped '" + slot.name() + "': gui opened (no pause key set)");
+					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': gui opened");
 				}
 			}
 
@@ -113,7 +123,7 @@ public final class RoutinizeManager {
 			slot.runner.tick(routinizeState);
 			if (wasRunning && !slot.isRunning()) {
 				String reason = slot.runner.consumeStopReason();
-				routinizeState.sendFeedback("Stopped '" + slot.name() + "'" + (reason == null ? "" : ": " + reason));
+				routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "'" + (reason == null ? "" : ": " + reason));
 			}
 		}
 	}

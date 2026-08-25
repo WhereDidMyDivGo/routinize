@@ -15,7 +15,7 @@ public final class KeyActions {
 		"right", mc -> mc.options.keyRight,
 		"jump", mc -> mc.options.keyJump,
 		"sneak", mc -> mc.options.keyShift,
-		"click", mc -> mc.options.keyAttack,
+		"lclick", mc -> mc.options.keyAttack,
 		"rclick", mc -> mc.options.keyUse
 	);
 

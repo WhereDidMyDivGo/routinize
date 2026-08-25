@@ -27,6 +27,7 @@ public final class RoutinizeConfig {
 	public static void save() {
 		ConfigData data = new ConfigData();
 		data.settings.clickRetryTimeoutMs = RoutinizeSettings.INSTANCE.clickRetryTimeoutMs();
+		data.settings.chatFeedbackEnabled = RoutinizeSettings.INSTANCE.chatFeedbackEnabled();
 		for (RoutinizeSlot slot : RoutinizeManager.INSTANCE.profiles()) {
 			RoutinizeEntry entry = new RoutinizeEntry();
 			entry.name = slot.name();
@@ -57,6 +58,7 @@ public final class RoutinizeConfig {
 		if (data == null) return;
 		if (data.settings != null) {
 			RoutinizeSettings.INSTANCE.setClickRetryTimeoutMs(data.settings.clickRetryTimeoutMs);
+			RoutinizeSettings.INSTANCE.setChatFeedbackEnabled(data.settings.chatFeedbackEnabled);
 		}
 		if (data.routines == null) return;
 		for (RoutinizeEntry entry : data.routines) {
@@ -72,6 +74,7 @@ public final class RoutinizeConfig {
 				slot.applySource(entry.source == null ? "" : entry.source);
 			} catch (IllegalArgumentException e) {
 				LOGGER.warn("Failed to parse routine '{}': {}", entry.name, e.getMessage());
+				MinecraftRoutinizeState.INSTANCE.sendFeedback("Failed to load '" + entry.name + "': " + e.getMessage());
 				RoutinizeManager.INSTANCE.deleteProfile(slot);
 			}
 		}
@@ -84,6 +87,7 @@ public final class RoutinizeConfig {
 
 	private static final class SettingsData {
 		int clickRetryTimeoutMs = 5000;
+		boolean chatFeedbackEnabled = true;
 	}
 
 	private static final class RoutinizeEntry {

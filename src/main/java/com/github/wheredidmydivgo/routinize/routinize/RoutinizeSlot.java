@@ -12,6 +12,7 @@ public final class RoutinizeSlot {
 	public final RoutinizeRunner runner = new RoutinizeRunner();
 	private String sourceText = "";
 	private List<RoutinizeStep> program = List.of();
+	private boolean usesWorldActions = false;
 
 	RoutinizeSlot(String name) {
 		this.name = name == null || name.isBlank() ? "Unnamed" : name;
@@ -88,10 +89,6 @@ public final class RoutinizeSlot {
 		};
 	}
 
-	public boolean hasToggleKeyBinding() {
-		return toggleKeyCode != -1;
-	}
-
 	public boolean hasPauseKeyBinding() {
 		return pauseKeyCode != -1;
 	}
@@ -100,10 +97,32 @@ public final class RoutinizeSlot {
 		return sourceText;
 	}
 
+	public boolean usesWorldActions() {
+		return usesWorldActions;
+	}
+
 	public void applySource(String text) {
 		List<RoutinizeStep> parsed = RoutinizeParser.parse(text);
 		this.sourceText = text;
 		this.program = parsed;
+		this.usesWorldActions = containsWorldAction(parsed);
+	}
+
+	private static boolean containsWorldAction(List<RoutinizeStep> steps) {
+		for (RoutinizeStep step : steps) {
+			if (step instanceof RoutinizeStep.Action action) {
+				for (RoutinizeStep.ActionToken token : action.tokens()) {
+					if (token instanceof RoutinizeStep.KeyToggle) return true;
+				}
+			} else if (step instanceof RoutinizeStep.IfPresent ifStep) {
+				if (containsWorldAction(ifStep.thenSteps()) || containsWorldAction(ifStep.elseSteps())) return true;
+			} else if (step instanceof RoutinizeStep.LoopUntil loop) {
+				if (containsWorldAction(loop.body())) return true;
+			} else if (step instanceof RoutinizeStep.Loop loop) {
+				if (containsWorldAction(loop.body())) return true;
+			}
+		}
+		return false;
 	}
 
 	public void toggle() {

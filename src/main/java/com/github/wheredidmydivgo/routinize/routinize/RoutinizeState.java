@@ -21,4 +21,6 @@ public interface RoutinizeState {
 	void setKeyState(String key, boolean down);
 
 	void sendFeedback(String message);
+
+	void sendRoutineFeedback(String message);
 }

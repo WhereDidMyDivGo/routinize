@@ -91,10 +91,18 @@ public final class RoutinizeParser {
 			expectEnd(cursor);
 			return new RoutinizeStep.LoopUntil(match.name(), match.lore(), body);
 		}
-		if (line.equals("loop")) {
+		if (line.equals("loop") || line.startsWith("loop ")) {
+			int count = -1;
+			if (line.startsWith("loop ")) {
+				String value = line.substring("loop ".length()).strip();
+				count = Integer.parseInt(value);
+				if (count <= 0) {
+					throw new IllegalArgumentException("loop count must be positive: " + value);
+				}
+			}
 			List<RoutinizeStep> body = parseBlock(cursor, true);
 			expectEnd(cursor);
-			return new RoutinizeStep.Loop(body);
+			return new RoutinizeStep.Loop(body, count);
 		}
 		throw new IllegalArgumentException("unrecognised line: " + line);
 	}
@@ -119,6 +127,11 @@ public final class RoutinizeParser {
 			if (!CLICK_VERBS.contains(verb)) {
 				throw new IllegalArgumentException("unknown action token: " + content);
 			}
+			if (!rest.equals("item") && !rest.startsWith("item ")) {
+				throw new IllegalArgumentException("expected 'item' after '" + verb + "': " + content);
+			}
+			rest = rest.equals("item") ? "" : rest.substring("item ".length()).strip();
+
 			boolean shift = false;
 			if (rest.equals("shift") || rest.startsWith("shift ")) {
 				shift = true;
@@ -137,7 +150,7 @@ public final class RoutinizeParser {
 	}
 
 	private static RoutinizeStep parseIfBlock(String line, Cursor cursor) {
-		Match match = extractMatch(line);
+		Match match = extractMatch(extractCondition(line, "if"));
 		List<RoutinizeStep> thenSteps = parseBlock(cursor, true);
 		List<RoutinizeStep> elseSteps = List.of();
 		List<ElseIf> elseIfs = new ArrayList<>();
@@ -145,7 +158,7 @@ public final class RoutinizeParser {
 			String peek = cursor.peek();
 			if (peek.startsWith("elseif")) {
 				String elseifLine = cursor.next();
-				ElseIf elseIf = new ElseIf(extractMatch(elseifLine), parseBlock(cursor, true));
+				ElseIf elseIf = new ElseIf(extractMatch(extractCondition(elseifLine, "elseif")), parseBlock(cursor, true));
 				elseIfs.add(elseIf);
 				continue;
 			}
@@ -162,6 +175,14 @@ public final class RoutinizeParser {
 			elseSteps = List.of(new RoutinizeStep.IfPresent(elseIf.match.name(), elseIf.match.lore(), elseIf.thenSteps, elseSteps));
 		}
 		return new RoutinizeStep.IfPresent(match.name(), match.lore(), thenSteps, elseSteps);
+	}
+
+	private static String extractCondition(String line, String keyword) {
+		String rest = line.substring(keyword.length()).strip();
+		if (!rest.startsWith("(") || !rest.endsWith(")")) {
+			throw new IllegalArgumentException("expected '(' and ')' around condition: " + line);
+		}
+		return rest.substring(1, rest.length() - 1).strip();
 	}
 
 	private static void expectEnd(Cursor cursor) {
