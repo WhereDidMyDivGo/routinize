@@ -1,4 +1,4 @@
-package com.routinize.routinize;
+package com.github.wheredidmydivgo.routinize.routinize;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

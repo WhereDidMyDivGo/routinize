@@ -1,4 +1,4 @@
-package com.routinize.routinize;
+package com.github.wheredidmydivgo.routinize.routinize;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;

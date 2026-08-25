@@ -1,4 +1,4 @@
-package com.routinize.routinize;
+package com.github.wheredidmydivgo.routinize.routinize;
 
 import org.lwjgl.glfw.GLFW;
 

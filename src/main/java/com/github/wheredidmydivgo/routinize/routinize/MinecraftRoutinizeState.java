@@ -1,4 +1,4 @@
-package com.routinize.routinize;
+package com.github.wheredidmydivgo.routinize.routinize;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;

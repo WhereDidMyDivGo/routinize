@@ -1,4 +1,4 @@
-package com.routinize.routinize;
+package com.github.wheredidmydivgo.routinize.routinize;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

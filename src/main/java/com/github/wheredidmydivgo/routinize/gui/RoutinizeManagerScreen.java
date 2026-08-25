@@ -1,8 +1,9 @@
-package com.routinize.gui;
+package com.github.wheredidmydivgo.routinize.gui;
 
-import com.routinize.routinize.RoutinizeConfig;
-import com.routinize.routinize.RoutinizeManager;
-import com.routinize.routinize.RoutinizeSlot;
+import com.github.wheredidmydivgo.routinize.routinize.RoutinizeConfig;
+import com.github.wheredidmydivgo.routinize.routinize.RoutinizeManager;
+import com.github.wheredidmydivgo.routinize.routinize.RoutinizeSlot;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
