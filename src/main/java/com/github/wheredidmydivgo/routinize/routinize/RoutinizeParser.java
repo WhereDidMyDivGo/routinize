@@ -86,7 +86,7 @@ public final class RoutinizeParser {
 			return parseIfBlock(line, cursor);
 		}
 		if (line.startsWith("loop_until")) {
-			Match match = extractMatch(line);
+			Match match = extractMatch(extractCondition(line, "loop_until"));
 			List<RoutinizeStep> body = parseBlock(cursor, true);
 			expectEnd(cursor);
 			return new RoutinizeStep.LoopUntil(match.name(), match.lore(), body);

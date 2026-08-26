@@ -1,3 +1,6 @@
 {
-  "category.routinize": "Routinize"
+  "category.routinize": "Routinize",
+  "modmenu.github": "Source",
+  "modmenu.modrinth": "Modrinth",
+  "routinize.github_releases": "GitHub Releases"
 }

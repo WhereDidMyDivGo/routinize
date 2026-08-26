@@ -14,7 +14,6 @@ public class SettingsScreen extends Screen {
 
 	private EditBox clickRetryField;
 	private boolean chatFeedbackEnabled;
-	private Button chatFeedbackButton;
 
 	public SettingsScreen() {
 		super(Component.literal("Routinize - Settings"));
@@ -30,7 +29,7 @@ public class SettingsScreen extends Screen {
 		addRenderableWidget(clickRetryField);
 
 		chatFeedbackEnabled = RoutinizeSettings.INSTANCE.chatFeedbackEnabled();
-		chatFeedbackButton = Button.builder(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")), b -> {
+		Button chatFeedbackButton = Button.builder(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")), b -> {
 			chatFeedbackEnabled = !chatFeedbackEnabled;
 			b.setMessage(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")));
 		}).bounds(width / 2 - 100, 90, 200, 20).build();
