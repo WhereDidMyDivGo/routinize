@@ -85,6 +85,12 @@ public final class RoutinizeParser {
 			}
 			return new RoutinizeStep.Continue();
 		}
+		if (line.equals("break")) {
+			if (!insideLoop) {
+				throw new IllegalArgumentException("'break' outside of a loop");
+			}
+			return new RoutinizeStep.Break();
+		}
 		if (line.startsWith("action")) {
 			return parseAction(line);
 		}

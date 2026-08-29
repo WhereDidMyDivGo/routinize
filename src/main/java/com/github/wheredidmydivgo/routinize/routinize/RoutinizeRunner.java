@@ -175,6 +175,16 @@ public final class RoutinizeRunner {
 			if (!stack.isEmpty()) {
 				stack.pop();
 			}
+		} else if (step instanceof RoutinizeStep.Break) {
+			while (!stack.isEmpty() && !stack.peek().isLoopBody) {
+				stack.pop();
+			}
+			if (!stack.isEmpty()) {
+				stack.pop();
+			}
+			if (!stack.isEmpty()) {
+				stack.peek().advance();
+			}
 		} else if (step instanceof RoutinizeStep.Action action) {
 			List<RoutinizeStep.ActionToken> tokens = action.tokens();
 			while (frame.actionTokenIndex < tokens.size()) {

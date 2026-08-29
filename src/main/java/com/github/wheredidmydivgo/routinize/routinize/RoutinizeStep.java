@@ -18,6 +18,8 @@ public sealed interface RoutinizeStep {
 
 	record Continue() implements RoutinizeStep {}
 
+	record Break() implements RoutinizeStep {}
+
 	record Action(List<ActionToken> tokens) implements RoutinizeStep {}
 
 	sealed interface ActionToken {}
