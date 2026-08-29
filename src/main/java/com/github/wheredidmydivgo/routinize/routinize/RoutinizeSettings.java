@@ -6,6 +6,8 @@ public final class RoutinizeSettings {
 
 	private int clickRetryTimeoutMs = 5000;
 	private boolean chatFeedbackEnabled = true;
+	private boolean releaseKeysOnStop = true;
+	private boolean autoResumeEnabled = false;
 
 	private RoutinizeSettings() {}
 
@@ -23,5 +25,21 @@ public final class RoutinizeSettings {
 
 	public void setChatFeedbackEnabled(boolean chatFeedbackEnabled) {
 		this.chatFeedbackEnabled = chatFeedbackEnabled;
+	}
+
+	public boolean releaseKeysOnStop() {
+		return releaseKeysOnStop;
+	}
+
+	public void setReleaseKeysOnStop(boolean releaseKeysOnStop) {
+		this.releaseKeysOnStop = releaseKeysOnStop;
+	}
+
+	public boolean autoResumeEnabled() {
+		return autoResumeEnabled;
+	}
+
+	public void setAutoResumeEnabled(boolean autoResumeEnabled) {
+		this.autoResumeEnabled = autoResumeEnabled;
 	}
 }

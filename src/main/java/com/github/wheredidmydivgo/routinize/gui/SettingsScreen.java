@@ -14,6 +14,8 @@ public class SettingsScreen extends Screen {
 
 	private EditBox clickRetryField;
 	private boolean chatFeedbackEnabled;
+	private boolean releaseKeysOnStop;
+	private boolean autoResumeEnabled;
 
 	public SettingsScreen() {
 		super(Component.literal("Routinize - Settings"));
@@ -34,6 +36,20 @@ public class SettingsScreen extends Screen {
 			b.setMessage(Component.literal("Chat feedback: " + (chatFeedbackEnabled ? "ON" : "OFF")));
 		}).bounds(width / 2 - 100, 90, 200, 20).build();
 		addRenderableWidget(chatFeedbackButton);
+
+		releaseKeysOnStop = RoutinizeSettings.INSTANCE.releaseKeysOnStop();
+		Button releaseKeysButton = Button.builder(Component.literal("Release keys on stop: " + (releaseKeysOnStop ? "ON" : "OFF")), b -> {
+			releaseKeysOnStop = !releaseKeysOnStop;
+			b.setMessage(Component.literal("Release keys on stop: " + (releaseKeysOnStop ? "ON" : "OFF")));
+		}).bounds(width / 2 - 100, 120, 200, 20).build();
+		addRenderableWidget(releaseKeysButton);
+
+		autoResumeEnabled = RoutinizeSettings.INSTANCE.autoResumeEnabled();
+		Button autoResumeButton = Button.builder(Component.literal("Auto-resume on gui close: " + (autoResumeEnabled ? "ON" : "OFF")), b -> {
+			autoResumeEnabled = !autoResumeEnabled;
+			b.setMessage(Component.literal("Auto-resume on gui close: " + (autoResumeEnabled ? "ON" : "OFF")));
+		}).bounds(width / 2 - 100, 150, 200, 20).build();
+		addRenderableWidget(autoResumeButton);
 
 		addRenderableWidget(Button.builder(Component.literal("Save"), b -> save())
 			.bounds(width / 2 - 100, height - 45, 95, 20)
@@ -60,6 +76,8 @@ public class SettingsScreen extends Screen {
 		}
 		RoutinizeSettings.INSTANCE.setClickRetryTimeoutMs(value);
 		RoutinizeSettings.INSTANCE.setChatFeedbackEnabled(chatFeedbackEnabled);
+		RoutinizeSettings.INSTANCE.setReleaseKeysOnStop(releaseKeysOnStop);
+		RoutinizeSettings.INSTANCE.setAutoResumeEnabled(autoResumeEnabled);
 		RoutinizeConfig.save();
 		MinecraftRoutinizeState.INSTANCE.sendFeedback("Settings saved");
 		Minecraft.getInstance().setScreen(new RoutinizeManagerScreen());

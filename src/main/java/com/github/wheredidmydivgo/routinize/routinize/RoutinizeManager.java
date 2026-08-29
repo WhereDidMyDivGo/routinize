@@ -37,7 +37,7 @@ public final class RoutinizeManager {
 	}
 
 	public void deleteProfile(RoutinizeSlot slot) {
-		slot.runner.stop();
+		slot.runner.forceStop();
 		slots.remove(slot);
 		prevToggleDown.remove(slot);
 		prevPauseDown.remove(slot);
@@ -45,7 +45,7 @@ public final class RoutinizeManager {
 
 	public void reset() {
 		for (RoutinizeSlot slot : slots) {
-			slot.runner.stop();
+			slot.runner.forceStop();
 		}
 		slots.clear();
 		prevToggleDown.clear();
@@ -66,12 +66,26 @@ public final class RoutinizeManager {
 		return List.copyOf(slots);
 	}
 
+	public void onDisconnect(RoutinizeState routinizeState) {
+		for (RoutinizeSlot slot : slots) {
+			if (!slot.isRunning() || slot.isPaused()) continue;
+			if (slot.hasPauseKeyBinding()) {
+				slot.runner.autoPause();
+				routinizeState.sendRoutineFeedback("Paused '" + slot.name() + "': disconnected");
+			} else {
+				slot.runner.forceStop();
+				routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': disconnected (no pause key set)");
+			}
+		}
+	}
+
 	public void tick(RoutinizeState routinizeState) {
 		Minecraft mc = Minecraft.getInstance();
 		long window = mc.getWindow().handle();
 
 		boolean screenOpenNow = routinizeState.anyScreenOpen();
 		boolean screenJustOpened = screenOpenNow && !wasScreenOpen;
+		boolean screenJustClosed = !screenOpenNow && wasScreenOpen;
 		wasScreenOpen = screenOpenNow;
 
 		for (RoutinizeSlot slot : slots) {
@@ -87,10 +101,10 @@ public final class RoutinizeManager {
 					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "'");
 				} else if (slot.hasPauseKeyBinding()) {
 					slot.toggle();
-					slot.togglePause();
+					slot.runner.autoPause();
 					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
 				} else {
-					routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui is open");
+					routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui open and no pause key set");
 				}
 			}
 			prevToggleDown.put(slot, toggleDown);
@@ -101,7 +115,7 @@ public final class RoutinizeManager {
 			if (pauseDown && !prevPause && slot.isRunning()) {
 				boolean wasPaused = slot.isPaused();
 				if (wasPaused && screenOpenNow && slot.usesWorldActions()) {
-					routinizeState.sendFeedback("Can't resume '" + slot.name() + "': gui is open");
+					routinizeState.sendFeedback("Can't resume '" + slot.name() + "': gui still open");
 				} else {
 					slot.togglePause();
 					routinizeState.sendRoutineFeedback((wasPaused ? "Resumed '" : "Paused '") + slot.name() + "'");
@@ -111,12 +125,18 @@ public final class RoutinizeManager {
 
 			if (screenJustOpened && slot.isRunning() && !slot.isPaused() && slot.runner.hasHeldKeys()) {
 				if (slot.hasPauseKeyBinding()) {
-					slot.runner.pause();
+					slot.runner.autoPause();
 					routinizeState.sendRoutineFeedback("Paused '" + slot.name() + "': gui opened");
 				} else {
-					slot.runner.stop();
-					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': gui opened");
+					slot.runner.forceStop();
+					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': gui opened (no pause key set)");
 				}
+			}
+
+			if (screenJustClosed && RoutinizeSettings.INSTANCE.autoResumeEnabled()
+					&& slot.isRunning() && slot.isPaused() && slot.runner.isAutoPaused()) {
+				slot.runner.resume();
+				routinizeState.sendRoutineFeedback("Resumed '" + slot.name() + "': gui closed");
 			}
 
 			boolean wasRunning = slot.isRunning();

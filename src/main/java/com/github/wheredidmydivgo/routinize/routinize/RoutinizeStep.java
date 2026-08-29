@@ -16,6 +16,8 @@ public sealed interface RoutinizeStep {
 
 	record Stop() implements RoutinizeStep {}
 
+	record Continue() implements RoutinizeStep {}
+
 	record Action(List<ActionToken> tokens) implements RoutinizeStep {}
 
 	sealed interface ActionToken {}
@@ -27,6 +29,7 @@ public sealed interface RoutinizeStep {
 	record IfPresent(
 		String nameContains,
 		String loreContains,
+		boolean negated,
 		List<RoutinizeStep> thenSteps,
 		List<RoutinizeStep> elseSteps
 	) implements RoutinizeStep {}
@@ -34,6 +37,7 @@ public sealed interface RoutinizeStep {
 	record LoopUntil(
 		String nameContains,
 		String loreContains,
+		boolean negated,
 		List<RoutinizeStep> body
 	) implements RoutinizeStep {}
 

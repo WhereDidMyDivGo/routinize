@@ -14,6 +14,7 @@ public final class RoutinizeRunner {
 	private final Set<String> heldKeys = new HashSet<>();
 	private boolean running = false;
 	private boolean paused = false;
+	private boolean autoPaused = false;
 	private long pauseStartNanos;
 	private String lastStopReason;
 
@@ -23,6 +24,10 @@ public final class RoutinizeRunner {
 
 	public boolean isPaused() {
 		return paused;
+	}
+
+	public boolean isAutoPaused() {
+		return autoPaused;
 	}
 
 	public boolean hasHeldKeys() {
@@ -37,16 +42,27 @@ public final class RoutinizeRunner {
 
 	public void start(List<RoutinizeStep> program) {
 		stack.clear();
-		stack.push(new Frame(program));
+		stack.push(new Frame(program, false));
 		running = true;
 		paused = false;
 	}
 
 	public void stop() {
+		stopInternal(RoutinizeSettings.INSTANCE.releaseKeysOnStop());
+	}
+
+	public void forceStop() {
+		stopInternal(true);
+	}
+
+	private void stopInternal(boolean release) {
 		running = false;
 		paused = false;
+		autoPaused = false;
 		stack.clear();
-		releaseHeldKeys();
+		if (release) {
+			releaseHeldKeys();
+		}
 		lastStopReason = null;
 	}
 
@@ -64,9 +80,18 @@ public final class RoutinizeRunner {
 	}
 
 	public void pause() {
+		pauseInternal(false);
+	}
+
+	public void autoPause() {
+		pauseInternal(true);
+	}
+
+	private void pauseInternal(boolean auto) {
 		if (!running || paused) return;
 		setHeldKeysDown(false);
 		paused = true;
+		autoPaused = auto;
 		pauseStartNanos = System.nanoTime();
 	}
 
@@ -74,6 +99,7 @@ public final class RoutinizeRunner {
 		if (!running || !paused) return;
 		setHeldKeysDown(true);
 		paused = false;
+		autoPaused = false;
 		long pausedNanos = System.nanoTime() - pauseStartNanos;
 		Frame top = stack.peek();
 		if (top != null && top.stepStartNanos != 0) {
@@ -142,6 +168,13 @@ public final class RoutinizeRunner {
 			frame.advance();
 		} else if (step instanceof RoutinizeStep.Stop) {
 			stopWithReason("script stop");
+		} else if (step instanceof RoutinizeStep.Continue) {
+			while (!stack.isEmpty() && !stack.peek().isLoopBody) {
+				stack.pop();
+			}
+			if (!stack.isEmpty()) {
+				stack.pop();
+			}
 		} else if (step instanceof RoutinizeStep.Action action) {
 			List<RoutinizeStep.ActionToken> tokens = action.tokens();
 			while (frame.actionTokenIndex < tokens.size()) {
@@ -175,21 +208,23 @@ public final class RoutinizeRunner {
 			frame.advance();
 		} else if (step instanceof RoutinizeStep.IfPresent ifStep) {
 			boolean present = routinizeState.matchExists(ifStep.nameContains(), ifStep.loreContains());
+			if (ifStep.negated()) present = !present;
 			frame.advance();
-			stack.push(new Frame(present ? ifStep.thenSteps() : ifStep.elseSteps()));
+			stack.push(new Frame(present ? ifStep.thenSteps() : ifStep.elseSteps(), false));
 		} else if (step instanceof RoutinizeStep.LoopUntil loop) {
 			boolean present = routinizeState.matchExists(loop.nameContains(), loop.loreContains());
+			if (loop.negated()) present = !present;
 			if (present) {
 				frame.advance();
 			} else {
-				stack.push(new Frame(loop.body()));
+				stack.push(new Frame(loop.body(), true));
 			}
 		} else if (step instanceof RoutinizeStep.Loop loop) {
 			if (loop.count() != -1 && frame.loopIterations >= loop.count()) {
 				frame.advance();
 			} else {
 				frame.loopIterations++;
-				stack.push(new Frame(loop.body()));
+				stack.push(new Frame(loop.body(), true));
 			}
 		}
 	}
@@ -219,6 +254,7 @@ public final class RoutinizeRunner {
 
 	private static final class Frame {
 		final List<RoutinizeStep> steps;
+		final boolean isLoopBody;
 		int index = 0;
 		int actionTokenIndex = 0;
 		long stepStartNanos = 0;
@@ -226,8 +262,9 @@ public final class RoutinizeRunner {
 		List<String> waitBaseline;
 		int loopIterations = 0;
 
-		Frame(List<RoutinizeStep> steps) {
+		Frame(List<RoutinizeStep> steps, boolean isLoopBody) {
 			this.steps = steps;
+			this.isLoopBody = isLoopBody;
 		}
 
 		void advance() {

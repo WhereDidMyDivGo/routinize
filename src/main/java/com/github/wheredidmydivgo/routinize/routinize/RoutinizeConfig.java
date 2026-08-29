@@ -28,6 +28,8 @@ public final class RoutinizeConfig {
 		ConfigData data = new ConfigData();
 		data.settings.clickRetryTimeoutMs = RoutinizeSettings.INSTANCE.clickRetryTimeoutMs();
 		data.settings.chatFeedbackEnabled = RoutinizeSettings.INSTANCE.chatFeedbackEnabled();
+		data.settings.releaseKeysOnStop = RoutinizeSettings.INSTANCE.releaseKeysOnStop();
+		data.settings.autoResumeEnabled = RoutinizeSettings.INSTANCE.autoResumeEnabled();
 		for (RoutinizeSlot slot : RoutinizeManager.INSTANCE.profiles()) {
 			RoutinizeEntry entry = new RoutinizeEntry();
 			entry.name = slot.name();
@@ -59,6 +61,8 @@ public final class RoutinizeConfig {
 		if (data.settings != null) {
 			RoutinizeSettings.INSTANCE.setClickRetryTimeoutMs(data.settings.clickRetryTimeoutMs);
 			RoutinizeSettings.INSTANCE.setChatFeedbackEnabled(data.settings.chatFeedbackEnabled);
+			RoutinizeSettings.INSTANCE.setReleaseKeysOnStop(data.settings.releaseKeysOnStop);
+			RoutinizeSettings.INSTANCE.setAutoResumeEnabled(data.settings.autoResumeEnabled);
 		}
 		if (data.routines == null) return;
 		for (RoutinizeEntry entry : data.routines) {
@@ -88,6 +92,8 @@ public final class RoutinizeConfig {
 	private static final class SettingsData {
 		int clickRetryTimeoutMs = 5000;
 		boolean chatFeedbackEnabled = true;
+		boolean releaseKeysOnStop = true;
+		boolean autoResumeEnabled = false;
 	}
 
 	private static final class RoutinizeEntry {
