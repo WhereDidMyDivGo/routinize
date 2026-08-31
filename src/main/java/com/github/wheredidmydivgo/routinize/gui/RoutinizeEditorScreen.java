@@ -4,8 +4,8 @@ import com.github.wheredidmydivgo.routinize.routinize.MinecraftRoutinizeState;
 import com.github.wheredidmydivgo.routinize.routinize.RoutinizeConfig;
 import com.github.wheredidmydivgo.routinize.routinize.RoutinizeManager;
 import com.github.wheredidmydivgo.routinize.routinize.RoutinizeSlot;
-
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -13,7 +13,11 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
+import java.util.List;
+
 public class RoutinizeEditorScreen extends Screen {
+
+	private static final int LINE_HEIGHT = 9;
 
 	private enum Capture { NONE, TOGGLE, PAUSE }
 
@@ -100,6 +104,39 @@ public class RoutinizeEditorScreen extends Screen {
 		addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> Minecraft.getInstance().setScreen(new RoutinizeManagerScreen()))
 			.bounds(width / 2 + 10, height - 45, 140, 20)
 			.build());
+	}
+
+	@Override
+	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+		super.extractRenderState(graphics, mouseX, mouseY, delta);
+		renderSyntaxOverlay(graphics);
+	}
+
+	private void renderSyntaxOverlay(GuiGraphicsExtractor graphics) {
+		List<String> lines = List.of(editor.getValue().split("\n", -1));
+		if (editor.getInnerHeight() / LINE_HEIGHT != lines.size()) return;
+
+		RoutinizeSyntax.Analysis analysis = RoutinizeSyntax.analyze(lines);
+		int left = MultiLineEditBoxAccess.innerLeft(editor);
+		int top = MultiLineEditBoxAccess.innerTop(editor) - (int) editor.scrollAmount();
+		int visibleTop = editor.getY();
+		int visibleBottom = editor.getY() + editor.getHeight();
+
+		for (RoutinizeSyntax.BlockSpan span : analysis.blocks()) {
+			int depth = analysis.lines().get(span.startLine()).indentLevel();
+			int connectorX = left + font.width(" ".repeat(depth * 4 + 2));
+			int startY = top + span.startLine() * LINE_HEIGHT;
+			int endY = top + (span.endLine() + 1) * LINE_HEIGHT;
+			if (endY < visibleTop || startY > visibleBottom) continue;
+			graphics.fill(connectorX, Math.max(startY, visibleTop), connectorX + 1, Math.min(endY, visibleBottom), 0xFF555555);
+		}
+
+		for (int i = 0; i < lines.size(); i++) {
+			int y = top + i * LINE_HEIGHT;
+			if (y + LINE_HEIGHT < visibleTop || y > visibleBottom) continue;
+			int color = RoutinizeSyntax.defaultColor(analysis.lines().get(i).type());
+			graphics.text(font, lines.get(i), left, y, color, true);
+		}
 	}
 
 	@Override
