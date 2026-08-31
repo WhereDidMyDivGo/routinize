@@ -9,7 +9,7 @@ import java.util.Map;
 public final class RoutinizeSyntax {
 
 	public enum StatementType {
-		COMMAND, WAIT, ACTION, CONDITIONAL, LOOP, OTHER
+		COMMAND, WAIT, ACTION, CONDITIONAL, LOOP, FLOW, OTHER
 	}
 
 	private static final Map<StatementType, Integer> DEFAULT_COLORS = Map.of(
@@ -18,10 +18,13 @@ public final class RoutinizeSyntax {
 		StatementType.ACTION, 0xFF61AFEF,
 		StatementType.CONDITIONAL, 0xFFC586C0,
 		StatementType.LOOP, 0xFFD19A66,
+		StatementType.FLOW, 0xFFE06C75,
 		StatementType.OTHER, 0xFFD4D4D4
 	);
 
-	public record LineInfo(int indentLevel, StatementType type) {}
+	private static final int ARGUMENT_COLOR = 0xFF56B6C2;
+
+	public record LineInfo(int indentLevel, StatementType type, int argumentOffset, boolean isBlockBoundary) {}
 
 	public record BlockSpan(int startLine, int endLine, StatementType type) {}
 
@@ -33,10 +36,12 @@ public final class RoutinizeSyntax {
 		return DEFAULT_COLORS.get(type);
 	}
 
+	public static int argumentColor() {
+		return ARGUMENT_COLOR;
+	}
+
 	public static int indentDepthAfter(List<String> lines, int lineIndex) {
-		Analysis analysis = analyze(lines.subList(0, Math.min(lineIndex + 1, lines.size())));
-		Deque<Integer> unused = null;
-		return analysis.lines().isEmpty() ? 0 : openDepthAfterLast(lines.subList(0, Math.min(lineIndex + 1, lines.size())));
+		return openDepthAfterLast(lines.subList(0, Math.min(lineIndex + 1, lines.size())));
 	}
 
 	public static BlockSpan innermostBlockContaining(Analysis analysis, int lineIndex) {
@@ -58,17 +63,19 @@ public final class RoutinizeSyntax {
 		for (int i = 0; i < rawLines.size(); i++) {
 			String stripped = rawLines.get(i).strip();
 			boolean isCloser = stripped.equals("end") || stripped.equals("else") || stripped.startsWith("elseif");
+			boolean isOpener = isOpener(stripped);
 
 			int renderDepth = isCloser ? Math.max(0, stack.size() - 1) : stack.size();
 			StatementType type = classify(stripped, stack);
-			lines.add(new LineInfo(renderDepth, type));
+			int argumentOffset = argumentStartIndex(stripped, type);
+			lines.add(new LineInfo(renderDepth, type, argumentOffset, isCloser || isOpener));
 
 			if (stripped.equals("end")) {
 				if (!stack.isEmpty()) {
 					OpenBlock opened = stack.pop();
 					blocks.add(new BlockSpan(opened.startLine(), i, opened.type()));
 				}
-			} else if (isOpener(stripped)) {
+			} else if (isOpener) {
 				stack.push(new OpenBlock(i, type));
 			}
 		}
@@ -94,12 +101,24 @@ public final class RoutinizeSyntax {
 			|| stripped.startsWith("loop_until");
 	}
 
+	private static int argumentStartIndex(String stripped, StatementType type) {
+		if (type == StatementType.CONDITIONAL) {
+			int paren = stripped.indexOf('(');
+			if (paren >= 0) return paren;
+		} else if (type == StatementType.ACTION) {
+			int bracket = stripped.indexOf('[');
+			if (bracket >= 0) return bracket;
+		}
+		return -1;
+	}
+
 	private static StatementType classify(String stripped, Deque<OpenBlock> stack) {
 		if (stripped.startsWith("command")) return StatementType.COMMAND;
 		if (stripped.startsWith("wait")) return StatementType.WAIT;
 		if (stripped.startsWith("action")) return StatementType.ACTION;
 		if (stripped.startsWith("if") || stripped.startsWith("elseif") || stripped.equals("else")) return StatementType.CONDITIONAL;
 		if (stripped.equals("loop") || stripped.startsWith("loop ") || stripped.startsWith("loop_until")) return StatementType.LOOP;
+		if (stripped.equals("stop") || stripped.equals("continue") || stripped.equals("break") || stripped.equals("close")) return StatementType.FLOW;
 		if (stripped.equals("end")) {
 			OpenBlock top = stack.peek();
 			return top == null ? StatementType.OTHER : top.type();

@@ -9,6 +9,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.components.MultilineTextField;
+import net.minecraft.client.gui.components.Whence;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
@@ -31,6 +33,7 @@ public class RoutinizeEditorScreen extends Screen {
 	private Button toggleBindButton;
 	private Button pauseBindButton;
 	private MultiLineEditBox editor;
+	private String lastEditorValue = "";
 
 	public RoutinizeEditorScreen(RoutinizeSlot slot, boolean isNew) {
 		super(Component.literal(slot == null ? "Routinize - New Routine" : "Routinize - " + slot.name()));
@@ -86,6 +89,8 @@ public class RoutinizeEditorScreen extends Screen {
 			.build(font, 300, 135, Component.literal("Routine lines"));
 		editor.setCharacterLimit(8192);
 		editor.setValue(slot == null ? "" : slot.sourceText());
+		lastEditorValue = editor.getValue();
+		editor.setValueListener(this::onEditorValueChanged);
 		addRenderableWidget(editor);
 
 		if (isNew) {
@@ -106,6 +111,51 @@ public class RoutinizeEditorScreen extends Screen {
 			.build());
 	}
 
+	private void onEditorValueChanged(String newValue) {
+		String previous = lastEditorValue;
+		lastEditorValue = newValue;
+
+		MultilineTextField textField = MultiLineEditBoxAccess.textField(editor);
+		int cursor = textField.cursor();
+
+		boolean isNewlineInsertion = newValue.length() == previous.length() + 1
+			&& cursor > 0 && cursor <= newValue.length() && newValue.charAt(cursor - 1) == '\n';
+		if (!isNewlineInsertion) return;
+
+		List<String> lines = List.of(newValue.split("\n", -1));
+		int newLineIndex = countNewlinesBefore(newValue, cursor);
+		if (newLineIndex <= 0 || newLineIndex > lines.size()) return;
+		int completedLineIndex = newLineIndex - 1;
+
+		int depth = RoutinizeSyntax.indentDepthAfter(lines, completedLineIndex);
+		String indent = "    ".repeat(Math.max(0, depth));
+
+		String completedLine = lines.get(completedLineIndex).strip();
+		boolean opensBlock = completedLine.startsWith("if") || completedLine.equals("loop")
+			|| completedLine.startsWith("loop ") || completedLine.startsWith("loop_until");
+
+		if (!indent.isEmpty()) {
+			textField.insertText(indent);
+		}
+
+		if (opensBlock) {
+			int blankLinePosition = textField.cursor();
+			String closerIndent = "    ".repeat(Math.max(0, depth - 1));
+			textField.insertText("\n" + closerIndent + "end");
+			textField.seekCursor(Whence.ABSOLUTE, blankLinePosition);
+		}
+
+		lastEditorValue = editor.getValue();
+	}
+
+	private static int countNewlinesBefore(String value, int index) {
+		int count = 0;
+		for (int i = 0; i < index && i < value.length(); i++) {
+			if (value.charAt(i) == '\n') count++;
+		}
+		return count;
+	}
+
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(graphics, mouseX, mouseY, delta);
@@ -124,18 +174,35 @@ public class RoutinizeEditorScreen extends Screen {
 
 		for (RoutinizeSyntax.BlockSpan span : analysis.blocks()) {
 			int depth = analysis.lines().get(span.startLine()).indentLevel();
-			int connectorX = left + font.width(" ".repeat(depth * 4 + 2));
-			int startY = top + span.startLine() * LINE_HEIGHT;
-			int endY = top + (span.endLine() + 1) * LINE_HEIGHT;
-			if (endY < visibleTop || startY > visibleBottom) continue;
-			graphics.fill(connectorX, Math.max(startY, visibleTop), connectorX + 1, Math.min(endY, visibleBottom), 0xFF555555);
+			int connectorX = left + font.width(" ".repeat(depth * 4));
+			for (int i = span.startLine(); i <= span.endLine(); i++) {
+				RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
+				boolean skip = i == span.startLine() || i == span.endLine()
+					|| (lineInfo.indentLevel() == depth && lineInfo.isBlockBoundary());
+				if (skip) continue;
+				int rowTop = top + i * LINE_HEIGHT;
+				int rowBottom = rowTop + LINE_HEIGHT;
+				if (rowBottom < visibleTop || rowTop > visibleBottom) continue;
+				graphics.fill(connectorX, Math.max(rowTop, visibleTop), connectorX + 1, Math.min(rowBottom, visibleBottom), 0xFF555555);
+			}
 		}
 
 		for (int i = 0; i < lines.size(); i++) {
 			int y = top + i * LINE_HEIGHT;
 			if (y + LINE_HEIGHT < visibleTop || y > visibleBottom) continue;
-			int color = RoutinizeSyntax.defaultColor(analysis.lines().get(i).type());
-			graphics.text(font, lines.get(i), left, y, color, true);
+			String raw = lines.get(i);
+			RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
+			int primaryColor = RoutinizeSyntax.defaultColor(lineInfo.type());
+			if (lineInfo.argumentOffset() < 0) {
+				graphics.text(font, raw, left, y, primaryColor, true);
+			} else {
+				int leadingWs = raw.length() - raw.stripLeading().length();
+				int splitAt = leadingWs + lineInfo.argumentOffset();
+				String keywordPart = raw.substring(0, splitAt);
+				String argumentPart = raw.substring(splitAt);
+				graphics.text(font, keywordPart, left, y, primaryColor, true);
+				graphics.text(font, argumentPart, left + font.width(keywordPart), y, RoutinizeSyntax.argumentColor(), true);
+			}
 		}
 	}
 
@@ -197,6 +264,7 @@ public class RoutinizeEditorScreen extends Screen {
 
 		RoutinizeConfig.save();
 		message("Saved profile: " + name);
+
 		Minecraft.getInstance().setScreen(new RoutinizeManagerScreen());
 	}
 
