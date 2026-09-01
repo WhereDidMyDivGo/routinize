@@ -12,17 +12,18 @@ public final class RoutinizeSyntax {
 		COMMAND, WAIT, ACTION, CONDITIONAL, LOOP, FLOW, OTHER
 	}
 
+	private static final int IMPERATIVE_COLOR = 0xFF98C379;
+	private static final int ARGUMENT_COLOR = 0xFF56B6C2;
+
 	private static final Map<StatementType, Integer> DEFAULT_COLORS = Map.of(
-		StatementType.COMMAND, 0xFF98C379,
+		StatementType.COMMAND, IMPERATIVE_COLOR,
 		StatementType.WAIT, 0xFFE5C07B,
-		StatementType.ACTION, 0xFF61AFEF,
+		StatementType.ACTION, IMPERATIVE_COLOR,
 		StatementType.CONDITIONAL, 0xFFC586C0,
 		StatementType.LOOP, 0xFFD19A66,
 		StatementType.FLOW, 0xFFE06C75,
 		StatementType.OTHER, 0xFFD4D4D4
 	);
-
-	private static final int ARGUMENT_COLOR = 0xFF56B6C2;
 
 	public record LineInfo(int indentLevel, StatementType type, int argumentOffset, boolean isBlockBoundary) {}
 
@@ -67,7 +68,7 @@ public final class RoutinizeSyntax {
 
 			int renderDepth = isCloser ? Math.max(0, stack.size() - 1) : stack.size();
 			StatementType type = classify(stripped, stack);
-			int argumentOffset = argumentStartIndex(stripped, type);
+			int argumentOffset = argumentStartIndex(stripped);
 			lines.add(new LineInfo(renderDepth, type, argumentOffset, isCloser || isOpener));
 
 			if (stripped.equals("end")) {
@@ -97,19 +98,19 @@ public final class RoutinizeSyntax {
 	}
 
 	private static boolean isOpener(String stripped) {
-		return stripped.startsWith("if") || stripped.equals("loop") || stripped.startsWith("loop ")
-			|| stripped.startsWith("loop_until");
+		return stripped.startsWith("if") || stripped.startsWith("while") || isLoop(stripped);
 	}
 
-	private static int argumentStartIndex(String stripped, StatementType type) {
-		if (type == StatementType.CONDITIONAL) {
-			int paren = stripped.indexOf('(');
-			if (paren >= 0) return paren;
-		} else if (type == StatementType.ACTION) {
-			int bracket = stripped.indexOf('[');
-			if (bracket >= 0) return bracket;
-		}
-		return -1;
+	private static boolean isLoop(String stripped) {
+		return stripped.equals("loop") || (stripped.startsWith("loop") && stripped.substring(4).strip().startsWith("("));
+	}
+
+	private static int argumentStartIndex(String stripped) {
+		int paren = stripped.indexOf('(');
+		int bracket = stripped.indexOf('[');
+		if (paren < 0) return bracket;
+		if (bracket < 0) return paren;
+		return Math.min(paren, bracket);
 	}
 
 	private static StatementType classify(String stripped, Deque<OpenBlock> stack) {
@@ -117,7 +118,7 @@ public final class RoutinizeSyntax {
 		if (stripped.startsWith("wait")) return StatementType.WAIT;
 		if (stripped.startsWith("action")) return StatementType.ACTION;
 		if (stripped.startsWith("if") || stripped.startsWith("elseif") || stripped.equals("else")) return StatementType.CONDITIONAL;
-		if (stripped.equals("loop") || stripped.startsWith("loop ") || stripped.startsWith("loop_until")) return StatementType.LOOP;
+		if (stripped.startsWith("while") || isLoop(stripped)) return StatementType.LOOP;
 		if (stripped.equals("stop") || stripped.equals("continue") || stripped.equals("break") || stripped.equals("close")) return StatementType.FLOW;
 		if (stripped.equals("end")) {
 			OpenBlock top = stack.peek();

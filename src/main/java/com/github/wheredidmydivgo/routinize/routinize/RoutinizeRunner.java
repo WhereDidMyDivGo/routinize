@@ -221,13 +221,13 @@ public final class RoutinizeRunner {
 			if (ifStep.negated()) present = !present;
 			frame.advance();
 			stack.push(new Frame(present ? ifStep.thenSteps() : ifStep.elseSteps(), false));
-		} else if (step instanceof RoutinizeStep.LoopUntil loop) {
-			boolean present = routinizeState.matchExists(loop.nameContains(), loop.loreContains());
-			if (loop.negated()) present = !present;
-			if (present) {
-				frame.advance();
+		} else if (step instanceof RoutinizeStep.While whileStep) {
+			boolean condition = routinizeState.matchExists(whileStep.nameContains(), whileStep.loreContains());
+			if (whileStep.negated()) condition = !condition;
+			if (condition) {
+				stack.push(new Frame(whileStep.body(), true));
 			} else {
-				stack.push(new Frame(loop.body(), true));
+				frame.advance();
 			}
 		} else if (step instanceof RoutinizeStep.Loop loop) {
 			if (loop.count() != -1 && frame.loopIterations >= loop.count()) {

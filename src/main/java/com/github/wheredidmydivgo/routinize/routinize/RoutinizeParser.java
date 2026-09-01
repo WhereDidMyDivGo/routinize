@@ -9,7 +9,6 @@ import java.util.regex.Pattern;
 public final class RoutinizeParser {
 
 	private static final Pattern KV = Pattern.compile("(name|lore)=\"([^\"]*)\"");
-	private static final Pattern ACTION_TOKEN = Pattern.compile("\\[([^\\]]*)\\]");
 	private static final Set<String> CLICK_VERBS = Set.of("lclick", "rclick", "mclick");
 
 	private RoutinizeParser() {}
@@ -50,11 +49,13 @@ public final class RoutinizeParser {
 	private static RoutinizeStep parseLine(Cursor cursor, boolean insideLoop) {
 		String line = cursor.next();
 
-		if (line.startsWith("command ")) {
-			return new RoutinizeStep.RunCommand(line.substring("command ".length()).strip());
+		if (line.startsWith("command")) {
+			return new RoutinizeStep.RunCommand(bracketContent(line, '[', ']', "command").strip());
 		}
-		if (line.startsWith("wait ")) {
-			String value = line.substring("wait ".length()).strip();
+		if (line.startsWith("wait")) {
+			String value = bracketContent(line, '(', ')', "wait").strip();
+			if (value.equals("open")) return new RoutinizeStep.WaitForOpen(5000);
+			if (value.equals("change")) return new RoutinizeStep.WaitForChange(5000);
 			int dash = value.indexOf('-');
 			if (dash > 0) {
 				int min = Integer.parseInt(value.substring(0, dash).strip());
@@ -66,12 +67,6 @@ public final class RoutinizeParser {
 			}
 			int ms = Integer.parseInt(value);
 			return new RoutinizeStep.Wait(ms, ms);
-		}
-		if (line.equals("wait_open")) {
-			return new RoutinizeStep.WaitForOpen(5000);
-		}
-		if (line.equals("wait_change")) {
-			return new RoutinizeStep.WaitForChange(5000);
 		}
 		if (line.equals("close")) {
 			return new RoutinizeStep.CloseScreen();
@@ -97,17 +92,17 @@ public final class RoutinizeParser {
 		if (line.startsWith("if")) {
 			return parseIfBlock(line, cursor, insideLoop);
 		}
-		if (line.startsWith("loop_until")) {
-			Condition condition = extractCondition(line, "loop_until");
+		if (line.startsWith("while")) {
+			Condition condition = extractCondition(line, "while");
 			Match match = extractMatch(condition.body());
 			List<RoutinizeStep> body = parseBlock(cursor, true, true);
 			expectEnd(cursor);
-			return new RoutinizeStep.LoopUntil(match.name(), match.lore(), condition.negated(), body);
+			return new RoutinizeStep.While(match.name(), match.lore(), condition.negated(), body);
 		}
-		if (line.equals("loop") || line.startsWith("loop ")) {
+		if (line.equals("loop") || (line.startsWith("loop") && line.substring(4).strip().startsWith("("))) {
 			int count = -1;
-			if (line.startsWith("loop ")) {
-				String value = line.substring("loop ".length()).strip();
+			if (!line.equals("loop")) {
+				String value = bracketContent(line, '(', ')', "loop").strip();
 				count = Integer.parseInt(value);
 				if (count <= 0) {
 					throw new IllegalArgumentException("loop count must be positive: " + value);
@@ -122,44 +117,51 @@ public final class RoutinizeParser {
 
 	private static RoutinizeStep parseAction(String line) {
 		List<RoutinizeStep.ActionToken> tokens = new ArrayList<>();
-		Matcher m = ACTION_TOKEN.matcher(line);
-		while (m.find()) {
-			String content = m.group(1).strip();
-			int sp = content.indexOf(' ');
-			String verb = (sp == -1 ? content : content.substring(0, sp)).toLowerCase();
-			String rest = sp == -1 ? "" : content.substring(sp + 1).strip();
-
-			if (rest.equals("down") || rest.equals("up")) {
-				if (!KeyActions.isValid(verb)) {
-					throw new IllegalArgumentException("unknown world action: " + verb);
-				}
-				tokens.add(new RoutinizeStep.KeyToggle(verb, rest.equals("down")));
-				continue;
+		int i = line.indexOf('[');
+		while (i >= 0) {
+			int close = findMatchingClose(line, i, '[', ']');
+			if (close < 0) {
+				throw new IllegalArgumentException("expected ']' to close action token: " + line);
 			}
-
-			if (!CLICK_VERBS.contains(verb)) {
-				throw new IllegalArgumentException("unknown action token: " + content);
-			}
-			if (!rest.equals("item") && !rest.startsWith("item ")) {
-				throw new IllegalArgumentException("expected 'item' after '" + verb + "': " + content);
-			}
-			rest = rest.equals("item") ? "" : rest.substring("item ".length()).strip();
-
-			boolean shift = false;
-			if (rest.equals("shift") || rest.startsWith("shift ")) {
-				shift = true;
-				rest = rest.equals("shift") ? "" : rest.substring("shift ".length()).strip();
-			}
-			if (shift && verb.equals("mclick")) {
-				throw new IllegalArgumentException("mclick cannot be combined with shift");
-			}
-			Match match = extractMatch(rest);
-			tokens.add(new RoutinizeStep.InventoryClick(verb, shift, match.name(), match.lore()));
+			tokens.add(parseActionToken(line.substring(i + 1, close).strip()));
+			i = line.indexOf('[', close + 1);
 		}
 		if (tokens.isEmpty()) {
 			throw new IllegalArgumentException("action requires at least one token");
 		}
 		return new RoutinizeStep.Action(tokens);
+	}
+
+	private static RoutinizeStep.ActionToken parseActionToken(String content) {
+		int sp = content.indexOf(' ');
+		String verb = (sp == -1 ? content : content.substring(0, sp)).toLowerCase();
+		String rest = sp == -1 ? "" : content.substring(sp + 1).strip();
+
+		if (rest.equals("down") || rest.equals("up")) {
+			if (!KeyActions.isValid(verb)) {
+				throw new IllegalArgumentException("unknown world action: " + verb);
+			}
+			return new RoutinizeStep.KeyToggle(verb, rest.equals("down"));
+		}
+
+		if (!CLICK_VERBS.contains(verb)) {
+			throw new IllegalArgumentException("unknown action token: " + content);
+		}
+		if (!rest.equals("item") && !rest.startsWith("item ")) {
+			throw new IllegalArgumentException("expected 'item' after '" + verb + "': " + content);
+		}
+		rest = rest.equals("item") ? "" : rest.substring("item ".length()).strip();
+
+		boolean shift = false;
+		if (rest.equals("shift") || rest.startsWith("shift ")) {
+			shift = true;
+			rest = rest.equals("shift") ? "" : rest.substring("shift ".length()).strip();
+		}
+		if (shift && verb.equals("mclick")) {
+			throw new IllegalArgumentException("mclick cannot be combined with shift");
+		}
+		Match match = extractMatch(rest);
+		return new RoutinizeStep.InventoryClick(verb, shift, match.name(), match.lore());
 	}
 
 	private static RoutinizeStep parseIfBlock(String line, Cursor cursor, boolean insideLoop) {
@@ -192,6 +194,18 @@ public final class RoutinizeParser {
 		return new RoutinizeStep.IfPresent(match.name(), match.lore(), condition.negated(), thenSteps, elseSteps);
 	}
 
+	private static String bracketContent(String line, char open, char close, String keyword) {
+		int openIndex = line.indexOf(open);
+		if (openIndex < 0) {
+			throw new IllegalArgumentException("expected '" + open + "' after " + keyword + ": " + line);
+		}
+		int closeIndex = findMatchingClose(line, openIndex, open, close);
+		if (closeIndex < 0) {
+			throw new IllegalArgumentException("expected '" + close + "' to close " + keyword + ": " + line);
+		}
+		return line.substring(openIndex + 1, closeIndex);
+	}
+
 	private static Condition extractCondition(String line, String keyword) {
 		String rest = line.substring(keyword.length()).strip();
 		boolean negated = false;
@@ -199,10 +213,38 @@ public final class RoutinizeParser {
 			negated = true;
 			rest = rest.equals("not") ? "" : rest.substring("not ".length()).strip();
 		}
-		if (!rest.startsWith("(") || !rest.endsWith(")")) {
+		int openIndex = rest.indexOf('(');
+		if (openIndex < 0) {
 			throw new IllegalArgumentException("expected '(' and ')' around condition: " + line);
 		}
-		return new Condition(rest.substring(1, rest.length() - 1).strip(), negated);
+		int closeIndex = findMatchingClose(rest, openIndex, '(', ')');
+		if (closeIndex < 0 || closeIndex != rest.length() - 1) {
+			throw new IllegalArgumentException("expected '(' and ')' around condition: " + line);
+		}
+		String body = rest.substring(openIndex + 1, closeIndex).strip();
+		if (body.equals("not") || body.startsWith("not ")) {
+			throw new IllegalArgumentException("'not' goes before the parentheses, e.g. '" + keyword + " not (...)', not '" + keyword + " (not (...))': " + line);
+		}
+		return new Condition(body, negated);
+	}
+
+	private static int findMatchingClose(String line, int openIndex, char open, char close) {
+		int depth = 0;
+		boolean inQuotes = false;
+		for (int i = openIndex; i < line.length(); i++) {
+			char c = line.charAt(i);
+			if (c == '"') {
+				inQuotes = !inQuotes;
+			} else if (!inQuotes) {
+				if (c == open) {
+					depth++;
+				} else if (c == close) {
+					depth--;
+					if (depth == 0) return i;
+				}
+			}
+		}
+		return -1;
 	}
 
 	private static void expectEnd(Cursor cursor) {

@@ -36,7 +36,7 @@ public sealed interface RoutinizeStep {
 		List<RoutinizeStep> elseSteps
 	) implements RoutinizeStep {}
 
-	record LoopUntil(
+	record While(
 		String nameContains,
 		String loreContains,
 		boolean negated,
