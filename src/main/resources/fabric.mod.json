@@ -10,7 +10,8 @@
   "environment": "client",
 
   "entrypoints": {
-    "client": ["com.github.wheredidmydivgo.routinize.RoutinizeClient"]
+    "client": ["com.github.wheredidmydivgo.routinize.RoutinizeClient"],
+    "modmenu": ["com.github.wheredidmydivgo.routinize.ModMenuEntry"]
   },
 
   "depends": {

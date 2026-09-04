@@ -84,6 +84,8 @@ public final class RoutinizeManager {
 		long window = mc.getWindow().handle();
 
 		boolean screenOpenNow = routinizeState.anyScreenOpen();
+		boolean containerOpenNow = routinizeState.screenOpen();
+		boolean hotkeysAllowed = !screenOpenNow || containerOpenNow;
 		boolean screenJustOpened = screenOpenNow && !wasScreenOpen;
 		boolean screenJustClosed = !screenOpenNow && wasScreenOpen;
 		wasScreenOpen = screenOpenNow;
@@ -92,22 +94,19 @@ public final class RoutinizeManager {
 			int toggleKey = slot.toggleKeyCode();
 			boolean toggleDown = toggleKey != -1 && GLFW.glfwGetKey(window, toggleKey) == GLFW.GLFW_PRESS;
 			boolean prevToggle = prevToggleDown.getOrDefault(slot, false);
-			if (toggleDown && !prevToggle) {
+			if (hotkeysAllowed && toggleDown && !prevToggle) {
 				if (slot.isRunning()) {
 					slot.toggle();
 					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "'");
-				} else if (!slot.usesWorldActions() && !screenOpenNow) {
-				} else if (slot.usesWorldActions() && screenOpenNow) {
-					if (slot.hasPauseKeyBinding()) {
-						slot.toggle();
-						slot.runner.autoPause();
-						routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
-					} else {
-						routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui open and no pause key set");
-					}
-				} else {
+				} else if (!slot.usesWorldActions() || !screenOpenNow) {
 					slot.toggle();
 					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "'");
+				} else if (slot.hasPauseKeyBinding()) {
+					slot.toggle();
+					slot.runner.autoPause();
+					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
+				} else {
+					routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui open and no pause key set");
 				}
 			}
 			prevToggleDown.put(slot, toggleDown);
@@ -115,7 +114,7 @@ public final class RoutinizeManager {
 			int pauseKey = slot.pauseKeyCode();
 			boolean pauseDown = pauseKey != -1 && GLFW.glfwGetKey(window, pauseKey) == GLFW.GLFW_PRESS;
 			boolean prevPause = prevPauseDown.getOrDefault(slot, false);
-			if (pauseDown && !prevPause && slot.isRunning()) {
+			if (hotkeysAllowed && pauseDown && !prevPause && slot.isRunning()) {
 				boolean wasPaused = slot.isPaused();
 				if (wasPaused && screenOpenNow && slot.usesWorldActions()) {
 					routinizeState.sendFeedback("Can't resume '" + slot.name() + "': gui still open");

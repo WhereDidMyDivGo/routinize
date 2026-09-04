@@ -120,6 +120,15 @@ public class RoutinizeEditorScreen extends Screen {
 		String previous = lastEditorValue;
 		lastEditorValue = newValue;
 
+		try {
+			handleEditorChange(previous, newValue);
+		} catch (RuntimeException e) {
+			applyingProgrammaticEdit = false;
+			MinecraftRoutinizeState.INSTANCE.sendFeedback("Editor overlay error: " + e);
+		}
+	}
+
+	private void handleEditorChange(String previous, String newValue) {
 		MultilineTextField textField = MultiLineEditBoxAccess.textField(editor);
 		int cursor = textField.cursor();
 
