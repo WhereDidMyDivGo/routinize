@@ -71,10 +71,10 @@ public final class RoutinizeManager {
 			if (!slot.isRunning() || slot.isPaused()) continue;
 			if (slot.hasPauseKeyBinding()) {
 				slot.runner.autoPause();
-				routinizeState.sendRoutineFeedback("Paused '" + slot.name() + "': disconnected");
+				routinizeState.sendFeedback("Paused '" + slot.name() + "': disconnected");
 			} else {
 				slot.runner.forceStop();
-				routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': disconnected (no pause key set)");
+				routinizeState.sendFeedback("Stopped '" + slot.name() + "': disconnected (no pause key set)");
 			}
 		}
 	}
@@ -96,15 +96,18 @@ public final class RoutinizeManager {
 				if (slot.isRunning()) {
 					slot.toggle();
 					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "'");
-				} else if (!screenOpenNow || !slot.usesWorldActions()) {
+				} else if (!slot.usesWorldActions() && !screenOpenNow) {
+				} else if (slot.usesWorldActions() && screenOpenNow) {
+					if (slot.hasPauseKeyBinding()) {
+						slot.toggle();
+						slot.runner.autoPause();
+						routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
+					} else {
+						routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui open and no pause key set");
+					}
+				} else {
 					slot.toggle();
 					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "'");
-				} else if (slot.hasPauseKeyBinding()) {
-					slot.toggle();
-					slot.runner.autoPause();
-					routinizeState.sendRoutineFeedback("Started '" + slot.name() + "' (paused: gui open)");
-				} else {
-					routinizeState.sendFeedback("Can't start '" + slot.name() + "': gui open and no pause key set");
 				}
 			}
 			prevToggleDown.put(slot, toggleDown);
@@ -128,7 +131,7 @@ public final class RoutinizeManager {
 					slot.runner.autoPause();
 					routinizeState.sendRoutineFeedback("Paused '" + slot.name() + "': gui opened");
 				} else {
-					slot.runner.forceStop();
+					slot.runner.stop();
 					routinizeState.sendRoutineFeedback("Stopped '" + slot.name() + "': gui opened (no pause key set)");
 				}
 			}

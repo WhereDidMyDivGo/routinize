@@ -116,8 +116,8 @@ public final class RoutinizeSlot {
 				}
 			} else if (step instanceof RoutinizeStep.IfPresent ifStep) {
 				if (containsWorldAction(ifStep.thenSteps()) || containsWorldAction(ifStep.elseSteps())) return true;
-			} else if (step instanceof RoutinizeStep.LoopUntil loop) {
-				if (containsWorldAction(loop.body())) return true;
+			} else if (step instanceof RoutinizeStep.While whileStep) {
+				if (containsWorldAction(whileStep.body())) return true;
 			} else if (step instanceof RoutinizeStep.Loop loop) {
 				if (containsWorldAction(loop.body())) return true;
 			}

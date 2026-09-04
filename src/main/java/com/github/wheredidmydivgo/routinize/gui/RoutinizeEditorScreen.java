@@ -34,6 +34,7 @@ public class RoutinizeEditorScreen extends Screen {
 	private Button pauseBindButton;
 	private MultiLineEditBox editor;
 	private String lastEditorValue = "";
+	private boolean applyingProgrammaticEdit = false;
 
 	public RoutinizeEditorScreen(RoutinizeSlot slot, boolean isNew) {
 		super(Component.literal(slot == null ? "Routinize - New Routine" : "Routinize - " + slot.name()));
@@ -112,16 +113,37 @@ public class RoutinizeEditorScreen extends Screen {
 	}
 
 	private void onEditorValueChanged(String newValue) {
+		if (applyingProgrammaticEdit) {
+			lastEditorValue = newValue;
+			return;
+		}
 		String previous = lastEditorValue;
 		lastEditorValue = newValue;
 
 		MultilineTextField textField = MultiLineEditBoxAccess.textField(editor);
 		int cursor = textField.cursor();
 
-		boolean isNewlineInsertion = newValue.length() == previous.length() + 1
-			&& cursor > 0 && cursor <= newValue.length() && newValue.charAt(cursor - 1) == '\n';
-		if (!isNewlineInsertion) return;
+		if (newValue.length() != previous.length() + 1 || cursor <= 0 || cursor > newValue.length()) {
+			return;
+		}
+		char typed = newValue.charAt(cursor - 1);
 
+		if (typed == '\n') {
+			handleAutoIndent(textField, newValue, cursor);
+		} else if (typed == '(' || typed == '[') {
+			autoInsertCloser(textField, typed == '(' ? ')' : ']');
+		} else if (typed == '"') {
+			handleQuoteTyped(textField, newValue, cursor);
+		} else if (typed == ')' || typed == ']') {
+			skipOverIfRedundant(textField, newValue, cursor, typed);
+		} else {
+			handleElseSnap(textField, newValue, cursor);
+		}
+
+		lastEditorValue = editor.getValue();
+	}
+
+	private void handleAutoIndent(MultilineTextField textField, String newValue, int cursor) {
 		List<String> lines = List.of(newValue.split("\n", -1));
 		int newLineIndex = countNewlinesBefore(newValue, cursor);
 		if (newLineIndex <= 0 || newLineIndex > lines.size()) return;
@@ -131,21 +153,99 @@ public class RoutinizeEditorScreen extends Screen {
 		String indent = "    ".repeat(Math.max(0, depth));
 
 		String completedLine = lines.get(completedLineIndex).strip();
-		boolean opensBlock = completedLine.startsWith("if") || completedLine.equals("loop")
-			|| completedLine.startsWith("loop ") || completedLine.startsWith("loop_until");
+		boolean opensBlock = completedLine.startsWith("if") || completedLine.startsWith("while")
+			|| completedLine.equals("loop") || (completedLine.startsWith("loop") && completedLine.substring(4).strip().startsWith("("));
 
-		if (!indent.isEmpty()) {
-			textField.insertText(indent);
+		applyingProgrammaticEdit = true;
+		try {
+			if (!indent.isEmpty()) {
+				textField.insertText(indent);
+			}
+
+			if (opensBlock) {
+				RoutinizeSyntax.Analysis analysis = RoutinizeSyntax.analyze(lines);
+				boolean alreadyClosed = analysis.blocks().stream().anyMatch(span -> span.startLine() == completedLineIndex);
+				if (!alreadyClosed) {
+					int blankLinePosition = textField.cursor();
+					String closerIndent = "    ".repeat(Math.max(0, depth - 1));
+					textField.insertText("\n" + closerIndent + "end");
+					textField.seekCursor(Whence.ABSOLUTE, blankLinePosition);
+				}
+			}
+		} finally {
+			applyingProgrammaticEdit = false;
 		}
+	}
 
-		if (opensBlock) {
-			int blankLinePosition = textField.cursor();
-			String closerIndent = "    ".repeat(Math.max(0, depth - 1));
-			textField.insertText("\n" + closerIndent + "end");
-			textField.seekCursor(Whence.ABSOLUTE, blankLinePosition);
+	private void handleElseSnap(MultilineTextField textField, String newValue, int cursor) {
+		List<String> lines = List.of(newValue.split("\n", -1));
+		int lineIndex = countNewlinesBefore(newValue, cursor);
+		if (lineIndex < 0 || lineIndex >= lines.size()) return;
+		String line = lines.get(lineIndex);
+		String stripped = line.strip();
+		if (!stripped.equals("else") && !stripped.equals("elseif")) return;
+
+		RoutinizeSyntax.Analysis analysis = RoutinizeSyntax.analyze(lines);
+		int correctDepth = analysis.lines().get(lineIndex).indentLevel();
+		int currentLeadingWs = line.length() - line.stripLeading().length();
+		int correctLeadingWs = correctDepth * 4;
+		if (currentLeadingWs == correctLeadingWs) return;
+
+		int lineStart = 0;
+		for (int i = 0; i < lineIndex; i++) lineStart += lines.get(i).length() + 1;
+
+		applyingProgrammaticEdit = true;
+		try {
+			textField.setSelecting(false);
+			textField.seekCursor(Whence.ABSOLUTE, lineStart);
+			textField.setSelecting(true);
+			textField.seekCursor(Whence.ABSOLUTE, lineStart + currentLeadingWs);
+			textField.insertText(" ".repeat(correctLeadingWs));
+			textField.setSelecting(false);
+			textField.seekCursor(Whence.ABSOLUTE, lineStart + correctLeadingWs + stripped.length());
+		} finally {
+			applyingProgrammaticEdit = false;
 		}
+	}
 
-		lastEditorValue = editor.getValue();
+	private void autoInsertCloser(MultilineTextField textField, char closer) {
+		applyingProgrammaticEdit = true;
+		try {
+			int insertAt = textField.cursor();
+			textField.insertText(String.valueOf(closer));
+			textField.seekCursor(Whence.ABSOLUTE, insertAt);
+		} finally {
+			applyingProgrammaticEdit = false;
+		}
+	}
+
+	private void handleQuoteTyped(MultilineTextField textField, String newValue, int cursor) {
+		boolean nextIsQuote = cursor < newValue.length() && newValue.charAt(cursor) == '"';
+		applyingProgrammaticEdit = true;
+		try {
+			if (nextIsQuote) {
+				textField.deleteText(-1);
+				textField.seekCursor(Whence.RELATIVE, 1);
+			} else {
+				int insertAt = textField.cursor();
+				textField.insertText("\"");
+				textField.seekCursor(Whence.ABSOLUTE, insertAt);
+			}
+		} finally {
+			applyingProgrammaticEdit = false;
+		}
+	}
+
+	private void skipOverIfRedundant(MultilineTextField textField, String newValue, int cursor, char typed) {
+		boolean nextIsSame = cursor < newValue.length() && newValue.charAt(cursor) == typed;
+		if (!nextIsSame) return;
+		applyingProgrammaticEdit = true;
+		try {
+			textField.deleteText(-1);
+			textField.seekCursor(Whence.RELATIVE, 1);
+		} finally {
+			applyingProgrammaticEdit = false;
+		}
 	}
 
 	private static int countNewlinesBefore(String value, int index) {
@@ -172,6 +272,11 @@ public class RoutinizeEditorScreen extends Screen {
 		int visibleTop = editor.getY();
 		int visibleBottom = editor.getY() + editor.getHeight();
 
+		int cursorLine = MultiLineEditBoxAccess.textField(editor).getLineAtCursor();
+		RoutinizeSyntax.BlockSpan activeSpan = cursorLine >= 0
+			? RoutinizeSyntax.innermostBlockContaining(analysis, cursorLine)
+			: null;
+
 		for (RoutinizeSyntax.BlockSpan span : analysis.blocks()) {
 			int depth = analysis.lines().get(span.startLine()).indentLevel();
 			int connectorX = left + font.width(" ".repeat(depth * 4));
@@ -183,7 +288,8 @@ public class RoutinizeEditorScreen extends Screen {
 				int rowTop = top + i * LINE_HEIGHT;
 				int rowBottom = rowTop + LINE_HEIGHT;
 				if (rowBottom < visibleTop || rowTop > visibleBottom) continue;
-				graphics.fill(connectorX, Math.max(rowTop, visibleTop), connectorX + 1, Math.min(rowBottom, visibleBottom), 0xFF555555);
+				boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
+				graphics.fill(connectorX, Math.max(rowTop, visibleTop), connectorX + 1, Math.min(rowBottom, visibleBottom), withAlpha(0x555555, dim ? 0x80 : 0xFF));
 			}
 		}
 
@@ -192,7 +298,9 @@ public class RoutinizeEditorScreen extends Screen {
 			if (y + LINE_HEIGHT < visibleTop || y > visibleBottom) continue;
 			String raw = lines.get(i);
 			RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
-			int primaryColor = RoutinizeSyntax.defaultColor(lineInfo.type());
+			boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
+			int alpha = dim ? 0x80 : 0xFF;
+			int primaryColor = withAlpha(RoutinizeSyntax.defaultColor(lineInfo.type()), alpha);
 			if (lineInfo.argumentOffset() < 0) {
 				graphics.text(font, raw, left, y, primaryColor, true);
 			} else {
@@ -201,9 +309,13 @@ public class RoutinizeEditorScreen extends Screen {
 				String keywordPart = raw.substring(0, splitAt);
 				String argumentPart = raw.substring(splitAt);
 				graphics.text(font, keywordPart, left, y, primaryColor, true);
-				graphics.text(font, argumentPart, left + font.width(keywordPart), y, RoutinizeSyntax.argumentColor(), true);
+				graphics.text(font, argumentPart, left + font.width(keywordPart), y, withAlpha(RoutinizeSyntax.argumentColor(), alpha), true);
 			}
 		}
+	}
+
+	private static int withAlpha(int color, int alpha) {
+		return (alpha << 24) | (color & 0x00FFFFFF);
 	}
 
 	@Override
@@ -264,7 +376,6 @@ public class RoutinizeEditorScreen extends Screen {
 
 		RoutinizeConfig.save();
 		message("Saved profile: " + name);
-
 		Minecraft.getInstance().setScreen(new RoutinizeManagerScreen());
 	}
 
