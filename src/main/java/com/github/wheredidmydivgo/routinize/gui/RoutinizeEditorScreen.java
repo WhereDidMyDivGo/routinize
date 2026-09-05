@@ -167,19 +167,17 @@ public class RoutinizeEditorScreen extends Screen {
 
 		applyingProgrammaticEdit = true;
 		try {
+			textField.setSelecting(false);
 			if (!indent.isEmpty()) {
 				textField.insertText(indent);
 			}
 
-			if (opensBlock) {
-				RoutinizeSyntax.Analysis analysis = RoutinizeSyntax.analyze(lines);
-				boolean alreadyClosed = analysis.blocks().stream().anyMatch(span -> span.startLine() == completedLineIndex);
-				if (!alreadyClosed) {
-					int blankLinePosition = textField.cursor();
-					String closerIndent = "    ".repeat(Math.max(0, depth - 1));
-					textField.insertText("\n" + closerIndent + "end");
-					textField.seekCursor(Whence.ABSOLUTE, blankLinePosition);
-				}
+			if (opensBlock && !RoutinizeSyntax.opensBlockAlreadyClosed(lines, completedLineIndex)) {
+				int blankLinePosition = textField.cursor();
+				String closerIndent = "    ".repeat(Math.max(0, depth - 1));
+				textField.insertText("\n" + closerIndent + "end");
+				textField.setSelecting(false);
+				textField.seekCursor(Whence.ABSOLUTE, blankLinePosition);
 			}
 		} finally {
 			applyingProgrammaticEdit = false;
@@ -220,8 +218,10 @@ public class RoutinizeEditorScreen extends Screen {
 	private void autoInsertCloser(MultilineTextField textField, char closer) {
 		applyingProgrammaticEdit = true;
 		try {
+			textField.setSelecting(false);
 			int insertAt = textField.cursor();
 			textField.insertText(String.valueOf(closer));
+			textField.setSelecting(false);
 			textField.seekCursor(Whence.ABSOLUTE, insertAt);
 		} finally {
 			applyingProgrammaticEdit = false;
@@ -232,12 +232,15 @@ public class RoutinizeEditorScreen extends Screen {
 		boolean nextIsQuote = cursor < newValue.length() && newValue.charAt(cursor) == '"';
 		applyingProgrammaticEdit = true;
 		try {
+			textField.setSelecting(false);
 			if (nextIsQuote) {
 				textField.deleteText(-1);
+				textField.setSelecting(false);
 				textField.seekCursor(Whence.RELATIVE, 1);
 			} else {
 				int insertAt = textField.cursor();
 				textField.insertText("\"");
+				textField.setSelecting(false);
 				textField.seekCursor(Whence.ABSOLUTE, insertAt);
 			}
 		} finally {
@@ -250,7 +253,9 @@ public class RoutinizeEditorScreen extends Screen {
 		if (!nextIsSame) return;
 		applyingProgrammaticEdit = true;
 		try {
+			textField.setSelecting(false);
 			textField.deleteText(-1);
+			textField.setSelecting(false);
 			textField.seekCursor(Whence.RELATIVE, 1);
 		} finally {
 			applyingProgrammaticEdit = false;
@@ -286,40 +291,45 @@ public class RoutinizeEditorScreen extends Screen {
 			? RoutinizeSyntax.innermostBlockContaining(analysis, cursorLine)
 			: null;
 
-		for (RoutinizeSyntax.BlockSpan span : analysis.blocks()) {
-			int depth = analysis.lines().get(span.startLine()).indentLevel();
-			int connectorX = left + font.width(" ".repeat(depth * 4));
-			for (int i = span.startLine(); i <= span.endLine(); i++) {
-				RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
-				boolean skip = i == span.startLine() || i == span.endLine()
-					|| (lineInfo.indentLevel() == depth && lineInfo.isBlockBoundary());
-				if (skip) continue;
-				int rowTop = top + i * LINE_HEIGHT;
-				int rowBottom = rowTop + LINE_HEIGHT;
-				if (rowBottom < visibleTop || rowTop > visibleBottom) continue;
-				boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
-				graphics.fill(connectorX, Math.max(rowTop, visibleTop), connectorX + 1, Math.min(rowBottom, visibleBottom), withAlpha(0x555555, dim ? 0x80 : 0xFF));
+		graphics.enableScissor(editor.getX(), editor.getY(), editor.getX() + editor.getWidth(), editor.getY() + editor.getHeight());
+		try {
+			for (RoutinizeSyntax.BlockSpan span : analysis.blocks()) {
+				int depth = analysis.lines().get(span.startLine()).indentLevel();
+				int connectorX = left + font.width(" ".repeat(depth * 4));
+				for (int i = span.startLine(); i <= span.endLine(); i++) {
+					RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
+					boolean skip = i == span.startLine() || i == span.endLine()
+						|| (lineInfo.indentLevel() == depth && lineInfo.isBlockBoundary());
+					if (skip) continue;
+					int rowTop = top + i * LINE_HEIGHT;
+					int rowBottom = rowTop + LINE_HEIGHT;
+					if (rowBottom < visibleTop || rowTop > visibleBottom) continue;
+					boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
+					graphics.fill(connectorX, Math.max(rowTop, visibleTop), connectorX + 1, Math.min(rowBottom, visibleBottom), withAlpha(0x555555, dim ? 0x80 : 0xFF));
+				}
 			}
-		}
 
-		for (int i = 0; i < lines.size(); i++) {
-			int y = top + i * LINE_HEIGHT;
-			if (y + LINE_HEIGHT < visibleTop || y > visibleBottom) continue;
-			String raw = lines.get(i);
-			RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
-			boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
-			int alpha = dim ? 0x80 : 0xFF;
-			int primaryColor = withAlpha(RoutinizeSyntax.defaultColor(lineInfo.type()), alpha);
-			if (lineInfo.argumentOffset() < 0) {
-				graphics.text(font, raw, left, y, primaryColor, true);
-			} else {
-				int leadingWs = raw.length() - raw.stripLeading().length();
-				int splitAt = leadingWs + lineInfo.argumentOffset();
-				String keywordPart = raw.substring(0, splitAt);
-				String argumentPart = raw.substring(splitAt);
-				graphics.text(font, keywordPart, left, y, primaryColor, true);
-				graphics.text(font, argumentPart, left + font.width(keywordPart), y, withAlpha(RoutinizeSyntax.argumentColor(), alpha), true);
+			for (int i = 0; i < lines.size(); i++) {
+				int y = top + i * LINE_HEIGHT;
+				if (y + LINE_HEIGHT < visibleTop || y > visibleBottom) continue;
+				String raw = lines.get(i);
+				RoutinizeSyntax.LineInfo lineInfo = analysis.lines().get(i);
+				boolean dim = activeSpan != null && (i < activeSpan.startLine() || i > activeSpan.endLine());
+				int alpha = dim ? 0x80 : 0xFF;
+				int primaryColor = withAlpha(RoutinizeSyntax.defaultColor(lineInfo.type()), alpha);
+				if (lineInfo.argumentOffset() < 0) {
+					graphics.text(font, raw, left, y, primaryColor, true);
+				} else {
+					int leadingWs = raw.length() - raw.stripLeading().length();
+					int splitAt = leadingWs + lineInfo.argumentOffset();
+					String keywordPart = raw.substring(0, splitAt);
+					String argumentPart = raw.substring(splitAt);
+					graphics.text(font, keywordPart, left, y, primaryColor, true);
+					graphics.text(font, argumentPart, left + font.width(keywordPart), y, withAlpha(RoutinizeSyntax.argumentColor(), alpha), true);
+				}
 			}
+		} finally {
+			graphics.disableScissor();
 		}
 	}
 

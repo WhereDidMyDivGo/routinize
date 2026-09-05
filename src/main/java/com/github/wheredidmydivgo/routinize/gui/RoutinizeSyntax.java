@@ -45,6 +45,29 @@ public final class RoutinizeSyntax {
 		return openDepthAfterLast(lines.subList(0, Math.min(lineIndex + 1, lines.size())));
 	}
 
+	public static boolean opensBlockAlreadyClosed(List<String> lines, int openerLineIndex) {
+		Deque<Integer> stack = new ArrayDeque<>();
+		for (int i = 0; i <= openerLineIndex && i < lines.size(); i++) {
+			String stripped = lines.get(i).strip();
+			if (stripped.equals("end")) {
+				if (!stack.isEmpty()) stack.pop();
+			} else if (isOpener(stripped)) {
+				stack.push(i);
+			}
+		}
+		if (stack.isEmpty()) return false;
+		for (int i = openerLineIndex + 1; i < lines.size(); i++) {
+			String stripped = lines.get(i).strip();
+			if (stripped.equals("end")) {
+				if (!stack.isEmpty()) stack.pop();
+				if (stack.isEmpty()) return true;
+			} else if (isOpener(stripped)) {
+				stack.push(i);
+			}
+		}
+		return false;
+	}
+
 	public static BlockSpan innermostBlockContaining(Analysis analysis, int lineIndex) {
 		BlockSpan best = null;
 		for (BlockSpan span : analysis.blocks()) {

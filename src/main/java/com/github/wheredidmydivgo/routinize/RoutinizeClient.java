@@ -22,7 +22,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.resources.Identifier;
 
-import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -153,12 +152,18 @@ public class RoutinizeClient implements ClientModInitializer {
 	}
 
 	private static void openDumpFile(Path file) {
-		if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-			MinecraftRoutinizeState.INSTANCE.sendFeedback("Can't auto-open on this system, file's still at .minecraft/routinize-dumps/" + file.getFileName());
-			return;
-		}
 		try {
-			Desktop.getDesktop().open(file.toFile());
+			String osName = System.getProperty("os.name", "").toLowerCase();
+			String path = file.toAbsolutePath().toString();
+			ProcessBuilder builder;
+			if (osName.contains("win")) {
+				builder = new ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", path);
+			} else if (osName.contains("mac")) {
+				builder = new ProcessBuilder("open", path);
+			} else {
+				builder = new ProcessBuilder("xdg-open", path);
+			}
+			builder.start();
 		} catch (IOException e) {
 			MinecraftRoutinizeState.INSTANCE.sendFeedback("Failed to open dump file: " + e.getMessage());
 		}
